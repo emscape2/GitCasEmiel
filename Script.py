@@ -5,7 +5,7 @@ import scipy
 import scipy.spatial
 import math
 
-
+## zie boven de defs voor de grote TODO lijst bounding box die half af is staat helemaal onderaan in bounding area
 
 context = bpy.context;
 e = (context.active_object.dimensions.x + context.active_object.dimensions.y + context.active_object.dimensions.z) / 100
@@ -25,7 +25,7 @@ for n in context.active_object['vertex_normal_list']:
 pointsPlusN = list()
 pointsPlus2N = list()
 i = 0
-while i < len(points):
+while i < len(points): #Deze nog optimaliseren, zie todo list
     point = points[i] + e * normals[i]
     pointsPlusN.append(point) #normals maal e toevoegen
     distances = scipy.spatial.distance.cdist(points,[point]) 
@@ -67,22 +67,11 @@ while i < len(points):
     cpValues.append(pointsPlus2N[i])
     i = i + 1
 
-
-
-
-#constraintMatrix = list(list())
-#i = 0
-#while i < len(cvalues): 
-#    j = 0
-#    constraintRow = list()
-#    while j < len(cvalues):
-#        constraintRow.append(math.pow(scipy.spatial.distance.euclidean(cvalues[i], cvalues[j]),3))
-#        j = j+1
-#    constraintMatrix.append(constraintRow)
-#    i = i+1
-
-#realConstraintMatrix = numpy.matrix(constraintMatrix)
-#weightValues = numpy.linalg.lstsq(realConstraintMatrix,dvector)
+#Todo: spatial index maken. Bij evalueren punt moet index doorgegeven worden voor een 100x100x100 array, met de cp indices allemaal in deze cubes ingedeeld. 
+#Als controlindices voor de MlsFunction de punten in de 26 omringende vakken + huidige vak gebruiken. Vervolgens checken of het er voldoende zijn, anders controleindices bijkiezen die obviously out of range zijn.
+#Op elk punt in de cube de Mlsfunctie aanroepen met als argumentten: point = dit gekozen puntm controlindices = de indices van de gebruikte controlpoints
+#Hierboven bij comment "deze nog optimaliseren" ervoor zorgen dat alleen de buren in de 26 omringende + huidige vak worden getest.
+#
 
 def MlsFunction(point, controlindices, smoothness = 4, degree = 1):
     controlPoints = list()
@@ -163,15 +152,7 @@ def buildIdealAMatrix(point, controlpoints = list(), degree = 1):
             matrixRow.append(innerVector)
             i = i + 1
     return numpy.matrix(idealAMatrix)
-
-
-
-
      
-
-def distanceToF(controlIndex, point):
-    return scipy.spatial.distance.euclidean(point, cpValues[controlIndex])
-    
 #Weendland function, smoothness still needs defining
 def Wendland(inputValue, smoothness = 1):
     if inputValue > smoothness:
@@ -180,36 +161,38 @@ def Wendland(inputValue, smoothness = 1):
         return (math.pow(1-(inputValue/smoothness),4) * (4*inputValue/smoothnes))
 
 
-# calculate bounding area 
-minX = 100000
-minY = 100000
-minZ = 100000
-maxX = -100000
-maxY = -100000
-maxZ = -100000
 
-for p in points:
-    if (p[x] > maxX):
-        maxX = p[x]
-    if (p[x] < minX):
-        minX = p[x]
-    if (p[y] > maxY):
-        maxY = p[y]
-    if (p[y] < minY):
-        minY = p[y]
-    if (p[z] > maxZ):
-        maxZ = p[z]
-    if (p[z] < minZ):
-        minZ = p[z]
-
-minX = minX * 1.01
-minY = minY * 1.01
-minZ = minZ * 1.01
-maxX = maxX * 1.01
-maxY = maxY * 1.01
-maxZ = maxZ * 1.01
-
-#divide de bounding area in cubes
-x = 0
-y = 0
-z = 0
+def boundingArea():
+    # calculate bounding area 
+    minX = 100000
+    minY = 100000
+    minZ = 100000
+    maxX = -100000
+    maxY = -100000
+    maxZ = -100000
+    
+    for p in points:
+        if (p[x] > maxX):
+            maxX = p[x]
+        if (p[x] < minX):
+            minX = p[x]
+        if (p[y] > maxY):
+            maxY = p[y]
+        if (p[y] < minY):
+            minY = p[y]
+        if (p[z] > maxZ):
+            maxZ = p[z]
+        if (p[z] < minZ):
+            minZ = p[z]
+    
+    minX = minX * 1.01
+    minY = minY * 1.01
+    minZ = minZ * 1.01
+    maxX = maxX * 1.01
+    maxY = maxY * 1.01
+    maxZ = maxZ * 1.01
+    
+    #divide de bounding area in cubes
+    x = 0
+    y = 0
+    z = 0
