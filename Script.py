@@ -119,7 +119,7 @@ pointsPlusN = list()
 pointsPlus2N = list()
 
 i = 0
-while i < len(points): #Deze nog optimaliseren, zie todo list
+while i < len(points): 
     point = points[i] + e * normals[i]
     pointsPlusN.append(point) #normals maal e toevoegen
     neighbours = spatialIndex.neighbouringPoints(point)
@@ -167,30 +167,34 @@ while i < len(points):
     cpValues.append(pointsPlus2N[i])
     i = i + 1
 
-#Todo: spatial index maken. Bij evalueren punt moet index doorgegeven worden voor een 100x100x100 array, met de cp indices allemaal in deze cubes ingedeeld. 
-#Als controlindices voor de MlsFunction de punten in de 26 omringende vakken + huidige vak gebruiken. Vervolgens checken of het er voldoende zijn, anders controleindices bijkiezen die obviously out of range zijn.
-#Op elk punt in de cube de Mlsfunctie aanroepen met als argumentten: point = dit gekozen puntm controlindices = de indices van de gebruikte controlpoints
-#Hierboven bij comment "deze nog optimaliseren" ervoor zorgen dat alleen de buren in de 26 omringende + huidige vak worden getest.
-#
+
 
 def MlsFunction(point, controlindices, smoothness = 4, degree = 1):
     controlPoints = list()
     dValues = list()
     basePoly = numpy.matrix( BasePolynomial(point, 0, True, degree))
-    basePoly.transpose;
+    basePoly.transpose();
     #pick wich points and values to use for interpolation
     for i in controlindices:
         controlPoints.append(cpValues[i])
         dValues.append(dvector[i])
-    #Gets the inverse of the A matrix, hier kijken of de 3 dimensionale matrix wel goed geaccepteerd wordt 
-    AMatrixInverse = buildIdealAMatrix(point, controlPoints, degree).I
+    
     #Calculates the B matrix
     BMatrix = buildIdealBMatrix(point, controlPoints, degree)
     
+    dValues = numpy.matrix(dValues).transpose()
+    
+    #Gets the inverse of the A matrix, hier kijken of de 3 dimensionale matrix wel goed geaccepteerd wordt 
+    AMatrixInverse = buildIdealAMatrix(point, controlPoints, degree)
+    for matrix in AMatrixInverse:
+        print(matrix)
+        matrix.I
+        #berekent voor iedere matrix in A de juiste waarden en telt deze op
+        matrix = matrix * BMatrix * dValues * basePoly
+        matrix = numpy.sum(matrix)
 
-    #Result = BasePoly * ( Amatrix-1 * Bmatrix * Dvalues )
-    result = basePoly * (AMatrixInverse * BMatrix * dValues)
-    return sum(result)
+    result = (AMatrixInverse )
+    return numpy.sum(result)
     
 
     #Leest de waarde van polynomial bij punt af, position maakt niet uit bij needEntirePolygon
@@ -251,11 +255,12 @@ def buildIdealAMatrix(point, controlpoints = list(), degree = 1):
                 j = j + 1
             matrixRow.append(innerVector)
             i = i + 1
-    return numpy.matrix(idealAMatrix)
+        idealAMatrix.append(numpy.matrix(matrixRow))
+    return idealAMatrix
      
 #Weendland function, smoothness still needs defining
 def Wendland(inputValue, smoothness = 1):
     if inputValue > smoothness:
         return 0
     else:
-        return (math.pow(1-(inputValue/smoothness),4) * (4*inputValue/smoothnes))
+        return (math.pow(1-(inputValue/smoothness),4) * (4*inputValue/smoothness))
