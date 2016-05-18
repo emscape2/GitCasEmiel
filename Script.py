@@ -58,28 +58,126 @@ for d in pointsPlusN:
 for d in pointsPlus2N:
     dvector.append(-e)
 
-cvalues = list()
+cpValues = list()
 
 i = 0
 while i < len(points): 
-    cvalues.append(points[i])
-    cvalues.append(pointsPlusN[i])
-    cvalues.append(pointsPlus2N[i])
+    cpValues.append(points[i])
+    cpValues.append(pointsPlusN[i])
+    cpValues.append(pointsPlus2N[i])
     i = i + 1
 
-constraintMatrix = list(list())
-i = 0
-while i < len(cvalues): 
-    j = 0
-    constraintRow = list()
-    while j < len(cvalues):
-        constraintRow.append(math.pow(scipy.spatial.distance.euclidean(cvalues[i], cvalues[j]),3))
-        j = j+1
-    constraintMatrix.append(constraintRow)
-    i = i+1
 
-realConstraintMatrix = numpy.matrix(constraintMatrix)
-weightValues = numpy.linalg.lstsq(realConstraintMatrix,dvector)
+
+
+#constraintMatrix = list(list())
+#i = 0
+#while i < len(cvalues): 
+#    j = 0
+#    constraintRow = list()
+#    while j < len(cvalues):
+#        constraintRow.append(math.pow(scipy.spatial.distance.euclidean(cvalues[i], cvalues[j]),3))
+#        j = j+1
+#    constraintMatrix.append(constraintRow)
+#    i = i+1
+
+#realConstraintMatrix = numpy.matrix(constraintMatrix)
+#weightValues = numpy.linalg.lstsq(realConstraintMatrix,dvector)
+
+def MlsFunction(point, controlindices, smoothness = 4, degree = 1):
+    controlPoints = list()
+    dValues = list()
+    basePoly = numpy.matrix( BasePolynomial(point, 0, True, degree))
+    basePoly.transpose;
+    #pick wich points and values to use for interpolation
+    for i in controlindices:
+        controlPoints.append(cpValues[i])
+        dValues.append(dvector[i])
+    #Gets the inverse of the A matrix, hier kijken of de 3 dimensionale matrix wel goed geaccepteerd wordt 
+    AMatrixInverse = buildIdealAMatrix(point, controlPoints, degree).I
+    #Calculates the B matrix
+    BMatrix = buildIdealBMatrix(point, controlPoints, degree)
+    
+
+    #Result = BasePoly * ( Amatrix-1 * Bmatrix * Dvalues )
+    result = basePoly * (AMatrixInverse * BMatrix * dValues)
+    return sum(result)
+    
+
+    #Leest de waarde van polynomial bij punt af, position maakt niet uit bij needEntirePolygon
+def BasePolynomial(point, position, needEntirePolygon = False, degree = 1):#nu voor degree 0 en 1, TODO: 2 implementeren en entire polygon achterhalen.
+    if needEntirePolygon == False:
+        if degree == 0 or position == 0:
+            return 1
+        if degree == 1:
+            switcher = {
+                1: point[x],
+                2: point[y],
+                3: point[z]
+                }
+            return switcher.get(position, 1)
+    if degree == 0:
+        return [1]
+    if degree == 1:
+        vector = list()
+        vector.append(1)
+        vector.append(point[x])
+        vector.append(point[y])
+        vector.append(point[z])
+        return vector
+
+
+    #returns the amount of elements present in the base polynomial
+def BasePolynomialLength(degree = 1):
+    switcher = {
+        1: 4,
+        2: 10
+        }
+    return switcher.get(degree, 1)
+
+#creates the optimal B matrix
+def buildIdealBMatrix(point, controlpoints = list(), degree = 1):
+    idealBMatrix = list()
+    i = 0
+    while i < BasePolynomialLength(degree):
+        matrixRow = list()
+        for cp in controlpoints:
+            matrixRow.append(Wendland(scipy.spatial.distance.euclidean(point,cp)) * BasePolynomial(cp,i))
+        idealBMatrix.append(matrixRow)
+        i = i +1
+    return numpy.matrix(idealBMatrix)
+
+#Creates the optimal A matrix 
+def buildIdealAMatrix(point, controlpoints = list(), degree = 1):
+    idealAMatrix = list()
+    
+    for cp in controlpoints:
+        i = 0
+        matrixRow = list()
+        while i < BasePolynomialLength(degree):
+            j = 0
+            innerVector = list()
+            while j < BasePolynomialLength(degree):
+                innerVector.append(Wendland(scipy.spatial.distance.euclidean(point,cp)) * BasePolynomial(cp,i) * BasePolynomial(cp,j))
+                j = j + 1
+            matrixRow.append(innerVector)
+            i = i + 1
+    return numpy.matrix(idealAMatrix)
+
+
+
+
+     
+
+def distanceToF(controlIndex, point):
+    return scipy.spatial.distance.euclidean(point, cpValues[controlIndex])
+    
+#Weendland function, smoothness still needs defining
+def Wendland(inputValue, smoothness = 1):
+    if inputValue > smoothness:
+        return 0
+    else:
+        return (math.pow(1-(inputValue/smoothness),4) * (4*inputValue/smoothnes))
 
 
 # calculate bounding area 
