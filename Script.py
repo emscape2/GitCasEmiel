@@ -5,8 +5,94 @@ import scipy
 import scipy.spatial
 import math
 
-## zie boven de defs voor de grote TODO lijst bounding box die half af is staat helemaal onderaan in bounding area
+class Spatial:   
 
+    # initialize spatial index
+    def __init__(self, res):
+        self.resolution = res
+        self.data = {}
+
+    # converts the three-tuple spatial index to a string that can be used as a key
+    def indexConvert(self, indexTuple):
+        return str(indexTuple[0] + (indexTuple[1] * 128) + (indexTuple[2] * (128**2)))
+
+    # returns the spatial index of a given point
+    def getIndex(self, point):
+        indX = math.floor((point.x - boundingArea['minX']) / context.active_object.dimensions.x * self.resolution)
+        indY = math.floor((point.y - boundingArea['minY']) / context.active_object.dimensions.y * self.resolution)
+        indZ = math.floor((point.z - boundingArea['minZ']) / context.active_object.dimensions.z * self.resolution)
+        return (indX, indY, indZ)
+
+    def search(self, point):
+        ind = self.indexConvert(self.getIndex(point))
+
+        if ind in self.data:
+            return self.data[ind]
+
+        return list()
+
+    # creates a spatial index from point list
+    def create(self, points):
+        for p in points:
+            ind = self.indexConvert(self.getIndex(p))
+            if not ind in self.data:
+                self.data[ind] = list()
+            self.data[ind].append(p)
+
+    # returns the neighbouring cubes of index
+    def neighbours(self, index):
+        neighbours = list()
+
+        # loop through neighbours
+        for x in range(max(0, index[0] - 1), min(self.resolution, index[0] + 1) + 1):
+            for y in range(max(0, index[1] - 1), min(self.resolution, index[1] + 1) + 1):
+                for z in range(max(0, index[2] - 1), min(self.resolution, index[2] + 1) + 1):
+                    if not (x == index[0] and y == index[1] and z == index[2]):
+                        neighbours.append((x,y,z))
+
+        return neighbours
+
+    # returns the neighbouring points of a point, EXCLUDING the point itself
+    def neighbouringPoints(self, point):
+        pList = list()
+
+        # retrieve points local cube
+        for p in self.search(point):
+            if not (p == point):
+                pList.append(p)
+
+        # retrieve points from neighbouring cubes
+        for ns in self.neighbours(self.getIndex(point)):
+            ind = self.indexConvert(ns)
+            if ind in self.data:
+                for p in self.data[ind]:
+                    pList.append(p)
+
+        return pList
+
+# calculates the bounding area of the object
+def getBoundingArea(inputData):
+    minX = 100000
+    minY = 100000
+    minZ = 100000
+    maxX = -100000
+    maxY = -100000
+    maxZ = -100000
+    
+    for vertex in inputData:
+        minX = min(vertex.x, minX)
+        maxX = max(vertex.x, maxX)
+
+        minY = min(vertex.y, minY)
+        maxY = max(vertex.y, maxY)
+
+        minZ = min(vertex.z, minZ)
+        maxZ = max(vertex.z, maxZ)
+    
+    return {"minX": minX * 1.01, "minY": minY * 1.01, "minZ": minZ * 1.01, "maxX": maxX * 1.01, "maxY": maxY * 1.01, "maxZ": maxZ * 1.01}
+
+
+## zie boven de defs voor de grote TODO lijst bounding box die half af is staat helemaal onderaan in bounding area
 context = bpy.context;
 e = (context.active_object.dimensions.x + context.active_object.dimensions.y + context.active_object.dimensions.z) / 100
 vertices = context.active_object.data.vertices
@@ -14,37 +100,51 @@ points = list()
 
 for v in vertices:
     points.append(v.co)
-    
+
+# calculate object bounding area
+boundingArea = getBoundingArea(points)
+
+# create spatial index
+spatialIndex = Spatial(100)
+spatialIndex.create(points)
 
 normals = list()
 
+# add normals to normal list
 for n in context.active_object['vertex_normal_list']:
     normal = mathutils.Vector((n[0], n[1], n[2]))
     normals.append(normal)
 
 pointsPlusN = list()
 pointsPlus2N = list()
+
 i = 0
 while i < len(points): #Deze nog optimaliseren, zie todo list
     point = points[i] + e * normals[i]
     pointsPlusN.append(point) #normals maal e toevoegen
-    distances = scipy.spatial.distance.cdist(points,[point]) 
-    for distance in distances:
-        if distance < e and distance > 0:
-            pointsPlusN = list()
-            pointsPlus2N = list()
-            i = -1
-            e = e / 2
-    if i > -1:
-        point = points[i] - e * normals[i] #normals maal e aftrekken
-        pointsPlus2N.append(point) 
-        distances = scipy.spatial.distance.cdist(points,[point]) 
+    neighbours = spatialIndex.neighbouringPoints(point)
+
+    if len(neighbours) > 0:
+        distances = scipy.spatial.distance.cdist(neighbours, [point]) 
         for distance in distances:
             if distance < e and distance > 0:
                 pointsPlusN = list()
                 pointsPlus2N = list()
                 i = -1
                 e = e / 2
+    if i > -1:
+        point = points[i] - e * normals[i] #normals maal e aftrekken
+        pointsPlus2N.append(point) 
+        neighbours = spatialIndex.neighbouringPoints(point)
+
+        if len(neighbours) > 0:
+            distances = scipy.spatial.distance.cdist(neighbours, [point]) 
+            for distance in distances:
+                if distance < e and distance > 0:
+                    pointsPlusN = list()
+                    pointsPlus2N = list()
+                    i = -1
+                    e = e / 2
     i = i+1
 
 dvector = list()
@@ -159,40 +259,3 @@ def Wendland(inputValue, smoothness = 1):
         return 0
     else:
         return (math.pow(1-(inputValue/smoothness),4) * (4*inputValue/smoothnes))
-
-
-
-def boundingArea():
-    # calculate bounding area 
-    minX = 100000
-    minY = 100000
-    minZ = 100000
-    maxX = -100000
-    maxY = -100000
-    maxZ = -100000
-    
-    for p in points:
-        if (p[x] > maxX):
-            maxX = p[x]
-        if (p[x] < minX):
-            minX = p[x]
-        if (p[y] > maxY):
-            maxY = p[y]
-        if (p[y] < minY):
-            minY = p[y]
-        if (p[z] > maxZ):
-            maxZ = p[z]
-        if (p[z] < minZ):
-            minZ = p[z]
-    
-    minX = minX * 1.01
-    minY = minY * 1.01
-    minZ = minZ * 1.01
-    maxX = maxX * 1.01
-    maxY = maxY * 1.01
-    maxZ = maxZ * 1.01
-    
-    #divide de bounding area in cubes
-    x = 0
-    y = 0
-    z = 0
