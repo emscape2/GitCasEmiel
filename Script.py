@@ -122,20 +122,26 @@ def MlsFunction(point, controlindices, smoothness = 4, degree = 1):
     controlPoints = list()
     dValues = list()
     basePoly = numpy.matrix(BasePolynomial(point, 0, True, degree))
-    basePoly.transpose;
+    basePoly.transpose();
     #pick wich points and values to use for interpolation
     for i in controlindices:
         controlPoints.append(cpValues[i])
         dValues.append(dvector[i])
 
+    dValues = numpy.matrix(dValues).I
     #Gets the inverse of the A matrix, hier kijken of de 3 dimensionale matrix wel goed geaccepteerd wordt 
-    AMatrixInverse = buildIdealAMatrix(point, controlPoints, degree).I
+    AMatrixInverse = buildIdealAMatrix(point, controlPoints, degree)
     #Calculates the B matrix
     BMatrix = buildIdealBMatrix(point, controlPoints, degree)
 
-    #Result = BasePoly * ( Amatrix-1 * Bmatrix * Dvalues )
-    result = basePoly * (AMatrixInverse * BMatrix * dValues)
-    return sum(result)
+    for matrix in AMatrixInverse:
+        matrix.I
+        #berekent voor iedere matrix in A de juiste waarden en telt deze op
+        matrix = matrix * BMatrix * dValues * basePoly
+        matrix = numpy.sum(matrix)
+    
+    result = AMatrixInverse
+    return numpy.sum(result)
     
 
     #Leest de waarde van polynomial bij punt af, position maakt niet uit bij needEntirePolygon
@@ -196,14 +202,15 @@ def buildIdealAMatrix(point, controlpoints = list(), degree = 1):
                 j = j + 1
             matrixRow.append(innerVector)
             i = i + 1
-    return numpy.matrix(idealAMatrix)
+        idealAMatrix.append(numpy.matrix(matrixRow))
+    return idealAMatrix
      
 #Weendland function, smoothness still needs defining
 def Wendland(inputValue, smoothness = 1):
     if inputValue > smoothness:
         return 0
     else:
-        return (math.pow(1-(inputValue/smoothness),4) * (4*inputValue/smoothnes))
+        return (math.pow(1-(inputValue/smoothness),4) * (4*inputValue/smoothness))
 
 
 ## zie boven de defs voor de grote TODO lijst bounding box die half af is staat helemaal onderaan in bounding area
@@ -290,12 +297,14 @@ while i < len(points):
     i = i + 1
 
 def evaluate():
+    f = lambda x, y, z: x**2 + y**2 + z**2
+
     vertices, triangles = mcubes.marching_cubes_func(
             (boundingArea['minX'],boundingArea['minY'],boundingArea['minZ']), 
             (boundingArea['maxX'], boundingArea['maxY'], boundingArea['maxZ']),  # Bounds
             100, 100, 100,                                                       # Number of samples in each dimension
             implicit,                                                            # Implicit function
-            0)                                                                   # Isosurface value                                                                
+            1)                                                                   # Isosurface value                                                                
 
     # Export the result to sphere2.dae
     mcubes.export_mesh(vertices, triangles, "/Users/Cas/Documents/DDM/result.dae", "MLS result")
