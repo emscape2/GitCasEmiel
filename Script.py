@@ -116,7 +116,7 @@ def implicit(x, y, z):
     vector = mathutils.Vector((x, y, z))
     neighbours = spatialIndex.search(vector, True)
 
-    if len(neighbours) > 0:
+    if not len(neighbours) > 0:
         return 10000
 
     indices = list()
@@ -300,7 +300,6 @@ while i < len(points):
 
 i = 0
 while i < len(points): 
-    cpValues.append(pointsPlus2N[i])
     i = i + 1
 
 spatialIndex = Spatial(100)
