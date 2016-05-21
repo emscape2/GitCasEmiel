@@ -25,11 +25,18 @@ class Spatial:
         return (indX, indY, indZ)
 
     # searches the spatial index for a certain point, returning all points that lie within the same cube, EXCLUDING the point itself
-    def search(self, point):
+    def search(self, point, provideIndices = False):
         ind = self.indexConvert(self.getIndex(point))
 
+
         if ind in self.data:
-            return self.data[ind]
+            if provideIndices:
+                return self.data[ind]
+            else: 
+                rList = list()
+                for item in self.data[ind]:
+                    rList.append(item)
+                    return rList
 
         return list()
 
@@ -151,9 +158,9 @@ def BasePolynomial(point, position, needEntirePolygon = False, degree = 1):#nu v
             return 1
         if degree == 1:
             switcher = {
-                1: point[x],
-                2: point[y],
-                3: point[z]
+                1: point.x,
+                2: point.y,
+                3: point.z
                 }
             return switcher.get(position, 1)
     if degree == 0:
@@ -161,9 +168,9 @@ def BasePolynomial(point, position, needEntirePolygon = False, degree = 1):#nu v
     if degree == 1:
         vector = list()
         vector.append(1)
-        vector.append(point[x])
-        vector.append(point[y])
-        vector.append(point[z])
+        vector.append(point.x)
+        vector.append(point.y)
+        vector.append(point.z)
         return vector
 
 
@@ -295,6 +302,9 @@ i = 0
 while i < len(points): 
     cpValues.append(pointsPlus2N[i])
     i = i + 1
+
+spatialIndex = Spatial(100)
+spatialIndex.create(cpValues)
 
 def evaluate():
     f = lambda x, y, z: x**2 + y**2 + z**2
