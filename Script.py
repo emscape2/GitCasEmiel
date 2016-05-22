@@ -53,34 +53,38 @@ class Spatial:
         self.data[ind].append((index, point))
  
     # returns the neighbouring cubes of index
-    def neighbours(self, index):
+    def neighbours(self, index, outerRange):
         neighbours = list()
 
         # loop through neighbours
-        for x in range(max(0, index[0] - 1), min(self.resolution, index[0] + 1) + 1):
-            for y in range(max(0, index[1] - 1), min(self.resolution, index[1] + 1) + 1):
-                for z in range(max(0, index[2] - 1), min(self.resolution, index[2] + 1) + 1):
+        for x in range(max(0, index[0] - outerRange), min(self.resolution, index[0] + outerRange) + 1):
+            for y in range(max(0, index[1] - outerRange), min(self.resolution, index[1] + outerRange) + 1):
+                for z in range(max(0, index[2] - outerRange), min(self.resolution, index[2] + outerRange) + 1):
                     if not (x == index[0] and y == index[1] and z == index[2]):
                         neighbours.append((x,y,z))
 
         return neighbours
 
     # returns the neighbouring points of a point, EXCLUDING the point itself
-    def neighbouringPoints(self, point, provideIndices = False):
+    def neighbouringPoints(self, point, provideIndices = False, minResults = 0):
         pList = list()
 
         # retrieve points local cube
         for p in self.search(point):
             if not (p == point):
                 pList.append(p)
-
-        # retrieve points from neighbouring cubes
-        for ns in self.neighbours(self.getIndex(point)):
-            ind = self.indexConvert(ns)
-            if ind in self.data:
-                for p in self.data[ind]:
-                    pList.append(p)
-
+        
+        range = 0
+        while len(pList) < minResults and range < 9:
+            pList = list()
+            range = range + 1
+            # retrieve points from neighbouring cubes
+            for ns in self.neighbours(self.getIndex(point), range):
+                ind = self.indexConvert(ns)
+                if ind in self.data:
+                    for p in self.data[ind]:
+                        pList.append(p)
+        
         if provideIndices:
             return pList
 
@@ -114,9 +118,9 @@ def getBoundingArea(inputData):
 # implicit function to be used by the marching cubes algorithm
 def implicit(x, y, z):
     vector = mathutils.Vector((x, y, z))
-    neighbours = spatialIndex.search(vector, True)
+    neighbours = spatialIndex.neighbouringPoints(vector, True, 9)
 
-    if not len(neighbours) > 0:
+    if len(neighbours) == 0:
         return 10000
 
     indices = list()
@@ -135,20 +139,30 @@ def MlsFunction(point, controlindices, smoothness = 4, degree = 1):
         controlPoints.append(cpValues[i])
         dValues.append(dvector[i])
 
-    dValues = numpy.matrix(dValues).I
+
+    dValues = numpy.matrix(dValues).transpose()
+
     #Gets the inverse of the A matrix, hier kijken of de 3 dimensionale matrix wel goed geaccepteerd wordt 
-    AMatrixInverse = buildIdealAMatrix(point, controlPoints, degree)
+    AMatrixInverse = buildIdealGramMatrix(point, controlPoints, degree)
     #Calculates the B matrix
     BMatrix = buildIdealBMatrix(point, controlPoints, degree)
+    
+    result = list()
+
+    stop = True
+    for matrix in AMatrixInverse:
+        if math.fabs(numpy.sum(matrix)) > 0:
+            stop = False
+
+    if stop:
+        return 100000
 
     for matrix in AMatrixInverse:
-        matrix.I
         #berekent voor iedere matrix in A de juiste waarden en telt deze op
-        matrix = matrix * BMatrix * dValues * basePoly
-        matrix = numpy.sum(matrix)
-    
-    result = AMatrixInverse
-    return numpy.sum(result)
+        newmatrix = matrix.I * BMatrix * dValues * basePoly
+        result.append(numpy.sum(newmatrix))
+
+    return sum(result)
     
 
     #Leest de waarde van polynomial bij punt af, position maakt niet uit bij needEntirePolygon
@@ -177,6 +191,7 @@ def BasePolynomial(point, position, needEntirePolygon = False, degree = 1):#nu v
     #returns the amount of elements present in the base polynomial
 def BasePolynomialLength(degree = 1):
     switcher = {
+        0: 1,
         1: 4,
         2: 10
         }
@@ -195,8 +210,8 @@ def buildIdealBMatrix(point, controlpoints = list(), degree = 1):
     return numpy.matrix(idealBMatrix)
 
 #Creates the optimal A matrix 
-def buildIdealAMatrix(point, controlpoints = list(), degree = 1):
-    idealAMatrix = list()
+def buildIdealGramMatrix(point, controlpoints = list(), degree = 1):
+    idealGramMatrix = list()
     
     for cp in controlpoints:
         i = 0
@@ -209,20 +224,21 @@ def buildIdealAMatrix(point, controlpoints = list(), degree = 1):
                 j = j + 1
             matrixRow.append(innerVector)
             i = i + 1
-        idealAMatrix.append(numpy.matrix(matrixRow))
-    return idealAMatrix
+        idealGramMatrix.append(numpy.matrix(matrixRow))
+    return idealGramMatrix
      
 #Weendland function, smoothness still needs defining
-def Wendland(inputValue, smoothness = 1):
-    if inputValue > smoothness:
+def Wendland(inputValue, smoothness = 0.5):
+    if inputValue > wendlandSmoothness:
         return 0
     else:
-        return (math.pow(1-(inputValue/smoothness),4) * (4*inputValue/smoothness))
+        return (math.pow(1-(inputValue/wendlandSmoothness),4) * (4*inputValue/wendlandSmoothness))
 
 
 ## zie boven de defs voor de grote TODO lijst bounding box die half af is staat helemaal onderaan in bounding area
 context = bpy.context;
 e = (context.active_object.dimensions.x + context.active_object.dimensions.y + context.active_object.dimensions.z) / 100
+wendlandSmoothness = 0.5
 vertices = context.active_object.data.vertices
 points = list()
 
@@ -233,7 +249,7 @@ for v in vertices:
 boundingArea = getBoundingArea(points)
 
 # create spatial index
-tmpSpatial = Spatial(100)
+tmpSpatial = Spatial(30)
 tmpSpatial.create(points)
 
 normals = list()
@@ -247,7 +263,7 @@ pointsPlusN = list()
 pointsPlus2N = list()
 
 i = 0
-while i < len(points): #Deze nog optimaliseren, zie todo list
+while i < len(points): #Deze nog optimaliseren
     point = points[i] + e * normals[i]
     pointsPlusN.append(point) #normals maal e toevoegen
     neighbours = tmpSpatial.neighbouringPoints(point)
@@ -300,27 +316,24 @@ while i < len(points):
 
 i = 0
 while i < len(points): 
+    cpValues.append(pointsPlus2N[i])
     i = i + 1
 
-spatialIndex = Spatial(100)
+spatialIndex = Spatial(30)
 spatialIndex.create(cpValues)
 
-def evaluate():
-    f = lambda x, y, z: x**2 + y**2 + z**2
-
+def evaluate(dimX,dimY,dimZ):
     vertices, triangles = mcubes.marching_cubes_func(
             (boundingArea['minX'],boundingArea['minY'],boundingArea['minZ']), 
             (boundingArea['maxX'], boundingArea['maxY'], boundingArea['maxZ']),  # Bounds
-            100, 100, 100,                                                       # Number of samples in each dimension
+            dimX, dimY, dimZ,                                                    # Number of samples in each dimension
             implicit,                                                            # Implicit function
-            1)                                                                   # Isosurface value                                                                
+            0)                                                                   # Isosurface value                                                                
 
     # Export the result to sphere2.dae
-    mcubes.export_mesh(vertices, triangles, "/Users/Cas/Documents/DDM/result.dae", "MLS result")
+    mcubes.export_mesh(vertices, triangles, "/Users/Emscape/Documents/Blender Projects/result.dae", "MLS result")
     print("Done. Result saved in 'result.dae'.")
 
-#Todo: spatial index maken. Bij evalueren punt moet index doorgegeven worden voor een 100x100x100 array, met de cp indices allemaal in deze cubes ingedeeld. 
-#Als controlindices voor de MlsFunction de punten in de 26 omringende vakken + huidige vak gebruiken. Vervolgens checken of het er voldoende zijn, anders controleindices bijkiezen die obviously out of range zijn.
-#Op elk punt in de cube de Mlsfunctie aanroepen met als argumentten: point = dit gekozen puntm controlindices = de indices van de gebruikte controlpoints
+
 
 
