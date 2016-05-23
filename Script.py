@@ -75,7 +75,7 @@ class Spatial:
                 pList.append(p)
         
         range = 0
-        while len(pList) < minResults and range < 3:
+        while len(pList) < minResults and range < 4:
             pList = list()
             range = range + 1
             # retrieve points from neighbouring cubes
@@ -203,6 +203,28 @@ def BasePolynomialLength(degree = 1):
         }
     return switcher.get(degree, 1)
 
+def findAllNeighbours(x,y,z):
+    min = mathutils.Vector((boundingArea['minX'],boundingArea['minY'],boundingArea['minZ']))
+    Range = mathutils.Vector((boundingArea['maxX'], boundingArea['maxY'], boundingArea['maxZ'])) - min
+    steps = mathutils.Vector((1/x,1/y,1/z))
+    for X in range(0,x):
+        for Y in range(0,y):
+            for Z in range(0,z):
+                pos = steps * mathutils.Vector((X,Y,Z))
+                coords = pos * Range + min
+                neighbours = spatialIndex.neighbouringPoints(coords,False,9)
+
+
+def findAllValues(x,y,z):
+    min = mathutils.Vector((boundingArea['minX'],boundingArea['minY'],boundingArea['minZ']))
+    Range = mathutils.Vector((boundingArea['maxX'], boundingArea['maxY'], boundingArea['maxZ'])) - min
+    steps = mathutils.Vector((1/x,1/y,1/z))
+    for X in range(0,x):
+        for Y in range(0,y):
+            for Z in range(0,z):
+                pos = steps * mathutils.Vector((X,Y,Z))
+                coords = pos * Range + min
+                implicit(coords.x,coords.y,coords.z)
 
 #Creates the optimal A matrix
 def buildIdealAMatrix(point, controlindices = list(), degree = 1):
@@ -221,10 +243,11 @@ def buildIdealPart1(point, controlindices = list(), degree = 1):
     idealMatrix = list()
     for index in controlindices:
         i = 0 
+        wendlandValue =  Wendland(scipy.spatial.distance.euclidean(point,cpValues[index]))
         matrixRow = list()
         while i < BasePolynomialLength(degree):
             bp =  basePolynomialList[index][i] * sum(basePolynomialList[index])
-            matrixRow.append(Wendland(scipy.spatial.distance.euclidean(point,cpValues[index])) * bp)#
+            matrixRow.append(wendlandValue * bp)#
             i = i+1
         idealMatrix.append(matrixRow)
     return numpy.matrix(idealMatrix)
@@ -233,11 +256,12 @@ def buildIdealPart1(point, controlindices = list(), degree = 1):
 def buildIdealPart2(point, controlindices = list(), degree = 1):
     idealMatrix = list()
     for index in controlindices:
-        i = 0 
+        i = 0
+        wendlandValue =  Wendland(scipy.spatial.distance.euclidean(point,cpValues[index]))
         matrixRow = list()
         while i < BasePolynomialLength(degree):
             bp =  basePolynomialList[index][i]
-            matrixRow.append(Wendland(scipy.spatial.distance.euclidean(point,cpValues[index])) * bp * dvector[index])#
+            matrixRow.append(wendlandValue * bp * dvector[index])#
             i = i+1
         idealMatrix.append(matrixRow)
     return numpy.matrix(idealMatrix)
@@ -262,16 +286,16 @@ def buildIdealaVector(aMatrix, rVector):
      
 #Weendland function, smoothness still needs defining
 def Wendland(inputValue, smoothness = 0.5):
-    if inputValue > wendlandSmoothness:
+    if inputValue > wendlandRadius:
         return 0
     else:
-        return (math.pow(1-(inputValue/wendlandSmoothness),4) * (4*inputValue/wendlandSmoothness))
+        return (math.pow(1-(inputValue/wendlandRadius),4) * (4*inputValue/wendlandRadius))
 
 
 ## zie boven de defs voor de grote TODO lijst bounding box die half af is staat helemaal onderaan in bounding area
 context = bpy.context;
 e = (context.active_object.dimensions.x + context.active_object.dimensions.y + context.active_object.dimensions.z) / 100
-wendlandSmoothness = 0.5
+wendlandRadius = e * 8
 vertices = context.active_object.data.vertices
 points = list()
 Degree = 1 
