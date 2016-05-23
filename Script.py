@@ -113,13 +113,13 @@ def getBoundingArea(inputData):
         minZ = min(vertex.z, minZ)
         maxZ = max(vertex.z, maxZ)
     
-    return {"minX": minX * 1.01, "minY": minY * 1.01, "minZ": minZ * 1.01, "maxX": maxX * 1.01, "maxY": maxY * 1.01, "maxZ": maxZ * 1.01}
+    return {"minX": minX - (abs(maxX )* 1.01), "minY": minY -  (abs(maxY )* 1.01), "minZ": minZ - (abs( maxZ )* 1.01), "maxX": maxX * 1.01, "maxY": maxY * 1.01, "maxZ": maxZ * 1.01}
 
 # implicit function to be used by the marching cubes algorithm
 def implicit(x, y, z):
     vector = mathutils.Vector((x, y, z))
     degree = Degree
-    neighbours = spatialIndex.neighbouringPoints(vector, True, 9)
+    neighbours = spatialIndex.neighbouringPoints(vector, True, 18)
 
     if len(neighbours) == 0:
         return 10000
@@ -144,8 +144,8 @@ def MlsFunction(point, controlindices, degree = 1):
         wendlandValues[i] = wendlandValue
         i = i + 1
 
-    part1 = buildIdealPart1(point,wendlandValues, controlindices,degree)
-    part2 = buildIdealPart2(point,wendlandValues, controlindices,degree)
+    part1 = buildIdealPart1(point,wendlandValues, controlindices,degree)#calculates the A * A^T matrix
+    part2 = buildIdealPart2(point,wendlandValues, controlindices,degree)#calculates the A^T * r matrix
     aVector = numpy.linalg.lstsq(part1,part2)
     return numpy.matrix( aVector[0])
 
