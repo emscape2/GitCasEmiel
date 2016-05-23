@@ -132,7 +132,7 @@ def implicit(x, y, z):
     a = MlsFunction(vector, indices, degree)
     b = BasePolynomial(vector,0,True,degree)
 
-    return numpy.matrix.sum( b * a )
+    return numpy.matrix.sum( a.transpose() * b )
 
 #calculates the MlsFunction
 def MlsFunction(point, controlindices, degree = 1):
@@ -146,7 +146,7 @@ def MlsFunction(point, controlindices, degree = 1):
 
     part1 = buildIdealPart1(point,wendlandValues, controlindices,degree)
     part2 = buildIdealPart2(point,wendlandValues, controlindices,degree)
-    aVector = numpy.linalg.lstsq(part2,part1)
+    aVector = numpy.linalg.lstsq(part1,part2)
     return numpy.matrix( aVector[0])
 
     
@@ -259,15 +259,13 @@ def buildIdealPart1(point,wendlandValues , controlindices = list(), degree = 1):
 
 #Creates matrix A^T * r, much more efficient
 def buildIdealPart2(point,wendlandValues, controlindices = list(), degree = 1):
-    idealMatrix = numpy.zeros((len(wendlandValues),BasePolynomialLength(degree)))
+    idealMatrix = numpy.zeros(len(wendlandValues))
     for index in range(0,len(wendlandValues)):
-        i = 0 
         wendlandValue = wendlandValues[index]
-        while i < BasePolynomialLength(degree):
-            bp =  basePolynomialList[controlindices[index]][i]
-            idealMatrix[index, i] = wendlandValue * bp * dvector[controlindices[index]]
-            i = i+1
-    return numpy.matrix(idealMatrix)
+        bp =  sum(basePolynomialList[controlindices[index]])
+        idealMatrix[index] = wendlandValue * bp * dvector[controlindices[index]]
+        
+    return idealMatrix
 
 #creates the optimal r Vector
 def buildIdealrVector(point, controlIndices = list(), degree = 1):
