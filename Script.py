@@ -75,7 +75,7 @@ class Spatial:
                 pList.append(p)
         
         range = 0
-        while len(pList) < minResults and range < 9:
+        while len(pList) < minResults and range < 2:
             pList = list()
             range = range + 1
             # retrieve points from neighbouring cubes
@@ -118,51 +118,25 @@ def getBoundingArea(inputData):
 # implicit function to be used by the marching cubes algorithm
 def implicit(x, y, z):
     vector = mathutils.Vector((x, y, z))
+    degree = Degree
     neighbours = spatialIndex.neighbouringPoints(vector, True, 9)
 
     if len(neighbours) == 0:
         return 10000
-
     indices = list()
     for n in neighbours:
         indices.append(n[0])
+    a = MlsFunction(vector, indices, degree)
+    b = BasePolynomial(vector,0,True,degree)
+    return numpy.matrix.sum( b * a )
 
-    return MlsFunction(vector, indices)
+def MlsFunction(point, controlindices, degree = 1):
+    AMatrix = buildIdealAMatrix(point, controlindices,degree)
+    rVector = buildIdealrVector(point, controlindices, degree)
+    aVector = buildIdealaVector(AMatrix, rVector)
+    return aVector
 
-def MlsFunction(point, controlindices, smoothness = 4, degree = 1):
-    controlPoints = list()
-    dValues = list()
-    basePoly = numpy.matrix(BasePolynomial(point, 0, True, degree))
-    basePoly.transpose();
-    #pick wich points and values to use for interpolation
-    for i in controlindices:
-        controlPoints.append(cpValues[i])
-        dValues.append(dvector[i])
-
-
-    dValues = numpy.matrix(dValues).transpose()
-
-    #Gets the inverse of the A matrix, hier kijken of de 3 dimensionale matrix wel goed geaccepteerd wordt 
-    AMatrixInverse = buildIdealGramMatrix(point, controlPoints, degree)
-    #Calculates the B matrix
-    BMatrix = buildIdealBMatrix(point, controlPoints, degree)
     
-    result = list()
-
-    stop = True
-    for matrix in AMatrixInverse:
-        if math.fabs(numpy.sum(matrix)) > 0:
-            stop = False
-
-    if stop:
-        return 100000
-
-    for matrix in AMatrixInverse:
-        #berekent voor iedere matrix in A de juiste waarden en telt deze op
-        newmatrix = matrix.I * BMatrix * dValues * basePoly
-        result.append(numpy.sum(newmatrix))
-
-    return sum(result)
     
 
     #Leest de waarde van polynomial bij punt af, position maakt niet uit bij needEntirePolygon
@@ -177,6 +151,19 @@ def BasePolynomial(point, position, needEntirePolygon = False, degree = 1):#nu v
                 3: point.z
                 }
             return switcher.get(position, 1)
+        if degree == 2:
+            switcher = {
+                1: point.x,
+                2: point.y,
+                3: point.z,
+                4: point.x * point.y,
+                5: point.x * point.z,
+                6: point.z * point.y,
+                7: point.x * point.x,
+                8: point.y * point.y,
+                9: point.z * point.z
+                }
+            return switcher.get(position, 1)
     if degree == 0:
         return [1]
     if degree == 1:
@@ -185,6 +172,19 @@ def BasePolynomial(point, position, needEntirePolygon = False, degree = 1):#nu v
         vector.append(point.x)
         vector.append(point.y)
         vector.append(point.z)
+        return vector
+    if degree == 2:
+        vector = list()
+        vector.append(1)
+        vector.append(point.x)
+        vector.append(point.y)
+        vector.append(point.z)
+        vector.append(point.y * point.x)
+        vector.append(point.x * point.z)
+        vector.append(point.z * point.y)
+        vector.append(point.x * point.x)
+        vector.append(point.y * point.y)
+        vector.append(point.z * point.z)
         return vector
 
 
@@ -209,7 +209,35 @@ def buildIdealBMatrix(point, controlpoints = list(), degree = 1):
         i = i +1
     return numpy.matrix(idealBMatrix)
 
-#Creates the optimal A matrix 
+#Creates the optimal A matrix
+def buildIdealAMatrix(point, controlindices = list(), degree = 1):
+    idealAMatrix = list()
+    for index in controlindices:
+        i = 0 
+        matrixRow = list()
+        while i < BasePolynomialLength(degree):
+            matrixRow.append(math.sqrt(Wendland(scipy.spatial.distance.euclidean(point,cpValues[index]))) * basePolynomialList[index][i])#basepolynomial cp, i cp = controlpoint als niet werkt
+            i = i+1
+        idealAMatrix.append(matrixRow)
+    return numpy.matrix(idealAMatrix)
+
+#creates the optimal r Vector
+def buildIdealrVector(point, controlIndices = list(), degree = 1):
+    rVector = list()
+    for i in controlIndices:
+        rVector.append(math.sqrt(Wendland(scipy.spatial.distance.euclidean(point,cpValues[i]))) * dvector[i])
+    return rVector
+
+#creates the optmal a Vector
+def buildIdealaVector(aMatrix, rVector):
+    part1 = aMatrix.transpose() * numpy.matrix(rVector).transpose()
+    part2 = aMatrix.transpose() * aMatrix
+    #iets met singular verwerking doen
+    a = numpy.linalg.lstsq(part2,part1)
+    return numpy.matrix(a[0])
+
+
+#Creates the optimal Gram matrix 
 def buildIdealGramMatrix(point, controlpoints = list(), degree = 1):
     idealGramMatrix = list()
     
@@ -226,6 +254,23 @@ def buildIdealGramMatrix(point, controlpoints = list(), degree = 1):
             i = i + 1
         idealGramMatrix.append(numpy.matrix(matrixRow))
     return idealGramMatrix
+
+
+#Creates the Gram Vector 
+def buildIdealGramVector(point, controlpoints = list(), degree = 1):
+    gramVector = list()
+    for cp in controlpoints:## moet inner product tussen base polynomials zjn
+        toadd = numpy.inner( BasePolynomial(point,0,True,degree) , BasePolynomial(point,0,True,degree)) * Wendland(scipy.spatial.distance.euclidean(point,controlpoints))
+        gramVector.append(toadd)
+
+    return gramVector
+
+def calculateLambdaVector(point, controlpoints = list(), degree = 1):
+    
+    gramVectorInverse = list()
+    for scalar in buildIdealGramVector(point,controlpoints,degree):
+        gramVectorInverse
+
      
 #Weendland function, smoothness still needs defining
 def Wendland(inputValue, smoothness = 0.5):
@@ -241,7 +286,7 @@ e = (context.active_object.dimensions.x + context.active_object.dimensions.y + c
 wendlandSmoothness = 0.5
 vertices = context.active_object.data.vertices
 points = list()
-
+Degree = 1 
 for v in vertices:
     points.append(v.co)
 
@@ -249,7 +294,7 @@ for v in vertices:
 boundingArea = getBoundingArea(points)
 
 # create spatial index
-tmpSpatial = Spatial(30)
+tmpSpatial = Spatial(8)
 tmpSpatial.create(points)
 
 normals = list()
@@ -319,8 +364,17 @@ while i < len(points):
     cpValues.append(pointsPlus2N[i])
     i = i + 1
 
-spatialIndex = Spatial(30)
+spatialIndex = Spatial(8)
 spatialIndex.create(cpValues)
+
+def newBasePolynomialList(degree):
+    Degree = degree
+    basePolynomialList = list()
+    for p in cpValues:
+        basePolynomialList.append(BasePolynomial(p,0,True,Degree))
+    return basePolynomialList
+
+basePolynomialList = newBasePolynomialList(Degree)
 
 def evaluate(dimX,dimY,dimZ):
     vertices, triangles = mcubes.marching_cubes_func(
