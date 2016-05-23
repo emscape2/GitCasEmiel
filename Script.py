@@ -75,7 +75,7 @@ class Spatial:
                 pList.append(p)
         
         range = 0
-        while len(pList) < minResults and range < 4:
+        while len(pList) < minResults and range < 3:
             pList = list()
             range = range + 1
             # retrieve points from neighbouring cubes
@@ -128,18 +128,25 @@ def implicit(x, y, z):
     for n in neighbours:
         indices.append(n[0])
 
+
     a = MlsFunction(vector, indices, degree)
     b = BasePolynomial(vector,0,True,degree)
 
     return numpy.matrix.sum( b * a )
 
+#calculates the MlsFunction
 def MlsFunction(point, controlindices, degree = 1):
-    part1 = buildIdealPart1(point,controlindices,degree)
-    part2 = buildIdealPart2(point,controlindices,degree)
+    
+    wendlandValues = numpy.zeros(len(controlindices))
+    i = 0
+    for index in controlindices:
+        wendlandValue =  Wendland(scipy.spatial.distance.euclidean(point,cpValues[index]))
+        wendlandValues[i] = wendlandValue
+        i = i + 1
+
+    part1 = buildIdealPart1(point,wendlandValues, controlindices,degree)
+    part2 = buildIdealPart2(point,wendlandValues, controlindices,degree)
     aVector = numpy.linalg.lstsq(part2,part1)
-    #AMatrix = buildIdealAMatrix(point, controlindices,degree)
-    #rVector = buildIdealrVector(point, controlindices, degree)
-    #aVector = buildIdealaVector(AMatrix, rVector)
     return numpy.matrix( aVector[0])
 
     
@@ -239,31 +246,27 @@ def buildIdealAMatrix(point, controlindices = list(), degree = 1):
     return numpy.matrix(idealAMatrix)
 
 #Creates matrix A * A^T, much more efficient
-def buildIdealPart1(point, controlindices = list(), degree = 1):
-    idealMatrix = list()
-    for index in controlindices:
+def buildIdealPart1(point,wendlandValues , controlindices = list(), degree = 1):
+    idealMatrix = numpy.zeros((len(wendlandValues),BasePolynomialLength(degree)))
+    for index in range(0,len(wendlandValues)):
         i = 0 
-        wendlandValue =  Wendland(scipy.spatial.distance.euclidean(point,cpValues[index]))
-        matrixRow = list()
+        wendlandValue = wendlandValues[index]
         while i < BasePolynomialLength(degree):
-            bp =  basePolynomialList[index][i] * sum(basePolynomialList[index])
-            matrixRow.append(wendlandValue * bp)#
+            bp =  basePolynomialList[controlindices[index]][i] * sum(basePolynomialList[controlindices[index]])
+            idealMatrix[index,i] = wendlandValue * bp#
             i = i+1
-        idealMatrix.append(matrixRow)
     return numpy.matrix(idealMatrix)
 
 #Creates matrix A^T * r, much more efficient
-def buildIdealPart2(point, controlindices = list(), degree = 1):
-    idealMatrix = list()
-    for index in controlindices:
-        i = 0
-        wendlandValue =  Wendland(scipy.spatial.distance.euclidean(point,cpValues[index]))
-        matrixRow = list()
+def buildIdealPart2(point,wendlandValues, controlindices = list(), degree = 1):
+    idealMatrix = numpy.zeros((len(wendlandValues),BasePolynomialLength(degree)))
+    for index in range(0,len(wendlandValues)):
+        i = 0 
+        wendlandValue = wendlandValues[index]
         while i < BasePolynomialLength(degree):
-            bp =  basePolynomialList[index][i]
-            matrixRow.append(wendlandValue * bp * dvector[index])#
+            bp =  basePolynomialList[controlindices[index]][i]
+            idealMatrix[index, i] = wendlandValue * bp * dvector[controlindices[index]]
             i = i+1
-        idealMatrix.append(matrixRow)
     return numpy.matrix(idealMatrix)
 
 #creates the optimal r Vector
@@ -289,13 +292,13 @@ def Wendland(inputValue, smoothness = 0.5):
     if inputValue > wendlandRadius:
         return 0
     else:
-        return (math.pow(1-(inputValue/wendlandRadius),4) * (4*inputValue/wendlandRadius))
+        return (((1-(inputValue/wendlandRadius)) ** 4) * (4*inputValue/wendlandRadius))
 
 
 ## zie boven de defs voor de grote TODO lijst bounding box die half af is staat helemaal onderaan in bounding area
 context = bpy.context;
 e = (context.active_object.dimensions.x + context.active_object.dimensions.y + context.active_object.dimensions.z) / 100
-wendlandRadius = e * 8
+wendlandRadius = e * 6
 vertices = context.active_object.data.vertices
 points = list()
 Degree = 1 
