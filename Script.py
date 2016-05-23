@@ -75,7 +75,7 @@ class Spatial:
                 pList.append(p)
         
         range = 0
-        while len(pList) < minResults and range < 2:
+        while len(pList) < minResults and range < 3:
             pList = list()
             range = range + 1
             # retrieve points from neighbouring cubes
@@ -123,18 +123,24 @@ def implicit(x, y, z):
 
     if len(neighbours) == 0:
         return 10000
+
     indices = list()
     for n in neighbours:
         indices.append(n[0])
+
     a = MlsFunction(vector, indices, degree)
     b = BasePolynomial(vector,0,True,degree)
+
     return numpy.matrix.sum( b * a )
 
 def MlsFunction(point, controlindices, degree = 1):
-    AMatrix = buildIdealAMatrix(point, controlindices,degree)
-    rVector = buildIdealrVector(point, controlindices, degree)
-    aVector = buildIdealaVector(AMatrix, rVector)
-    return aVector
+    part1 = buildIdealPart1(point,controlindices,degree)
+    part2 = buildIdealPart2(point,controlindices,degree)
+    aVector = numpy.linalg.lstsq(part2,part1)
+    #AMatrix = buildIdealAMatrix(point, controlindices,degree)
+    #rVector = buildIdealrVector(point, controlindices, degree)
+    #aVector = buildIdealaVector(AMatrix, rVector)
+    return numpy.matrix( aVector[0])
 
     
     
@@ -197,17 +203,6 @@ def BasePolynomialLength(degree = 1):
         }
     return switcher.get(degree, 1)
 
-#creates the optimal B matrix
-def buildIdealBMatrix(point, controlpoints = list(), degree = 1):
-    idealBMatrix = list()
-    i = 0
-    while i < BasePolynomialLength(degree):
-        matrixRow = list()
-        for cp in controlpoints:
-            matrixRow.append(Wendland(scipy.spatial.distance.euclidean(point,cp)) * BasePolynomial(cp,i))
-        idealBMatrix.append(matrixRow)
-        i = i +1
-    return numpy.matrix(idealBMatrix)
 
 #Creates the optimal A matrix
 def buildIdealAMatrix(point, controlindices = list(), degree = 1):
@@ -221,6 +216,32 @@ def buildIdealAMatrix(point, controlindices = list(), degree = 1):
         idealAMatrix.append(matrixRow)
     return numpy.matrix(idealAMatrix)
 
+#Creates matrix A * A^T, much more efficient
+def buildIdealPart1(point, controlindices = list(), degree = 1):
+    idealMatrix = list()
+    for index in controlindices:
+        i = 0 
+        matrixRow = list()
+        while i < BasePolynomialLength(degree):
+            bp =  basePolynomialList[index][i] * sum(basePolynomialList[index])
+            matrixRow.append(Wendland(scipy.spatial.distance.euclidean(point,cpValues[index])) * bp)#
+            i = i+1
+        idealMatrix.append(matrixRow)
+    return numpy.matrix(idealMatrix)
+
+#Creates matrix A^T * r, much more efficient
+def buildIdealPart2(point, controlindices = list(), degree = 1):
+    idealMatrix = list()
+    for index in controlindices:
+        i = 0 
+        matrixRow = list()
+        while i < BasePolynomialLength(degree):
+            bp =  basePolynomialList[index][i]
+            matrixRow.append(Wendland(scipy.spatial.distance.euclidean(point,cpValues[index])) * bp * dvector[index])#
+            i = i+1
+        idealMatrix.append(matrixRow)
+    return numpy.matrix(idealMatrix)
+
 #creates the optimal r Vector
 def buildIdealrVector(point, controlIndices = list(), degree = 1):
     rVector = list()
@@ -228,7 +249,7 @@ def buildIdealrVector(point, controlIndices = list(), degree = 1):
         rVector.append(math.sqrt(Wendland(scipy.spatial.distance.euclidean(point,cpValues[i]))) * dvector[i])
     return rVector
 
-#creates the optmal a Vector
+#creates the optimal a Vector
 def buildIdealaVector(aMatrix, rVector):
     part1 = aMatrix.transpose() * numpy.matrix(rVector).transpose()
     part2 = aMatrix.transpose() * aMatrix
@@ -237,39 +258,6 @@ def buildIdealaVector(aMatrix, rVector):
     return numpy.matrix(a[0])
 
 
-#Creates the optimal Gram matrix 
-def buildIdealGramMatrix(point, controlpoints = list(), degree = 1):
-    idealGramMatrix = list()
-    
-    for cp in controlpoints:
-        i = 0
-        matrixRow = list()
-        while i < BasePolynomialLength(degree):
-            j = 0
-            innerVector = list()
-            while j < BasePolynomialLength(degree):
-                innerVector.append(Wendland(scipy.spatial.distance.euclidean(point,cp)) * BasePolynomial(cp,i) * BasePolynomial(cp,j))
-                j = j + 1
-            matrixRow.append(innerVector)
-            i = i + 1
-        idealGramMatrix.append(numpy.matrix(matrixRow))
-    return idealGramMatrix
-
-
-#Creates the Gram Vector 
-def buildIdealGramVector(point, controlpoints = list(), degree = 1):
-    gramVector = list()
-    for cp in controlpoints:## moet inner product tussen base polynomials zjn
-        toadd = numpy.inner( BasePolynomial(point,0,True,degree) , BasePolynomial(point,0,True,degree)) * Wendland(scipy.spatial.distance.euclidean(point,controlpoints))
-        gramVector.append(toadd)
-
-    return gramVector
-
-def calculateLambdaVector(point, controlpoints = list(), degree = 1):
-    
-    gramVectorInverse = list()
-    for scalar in buildIdealGramVector(point,controlpoints,degree):
-        gramVectorInverse
 
      
 #Weendland function, smoothness still needs defining
@@ -294,7 +282,7 @@ for v in vertices:
 boundingArea = getBoundingArea(points)
 
 # create spatial index
-tmpSpatial = Spatial(8)
+tmpSpatial = Spatial(16)
 tmpSpatial.create(points)
 
 normals = list()
@@ -364,7 +352,7 @@ while i < len(points):
     cpValues.append(pointsPlus2N[i])
     i = i + 1
 
-spatialIndex = Spatial(8)
+spatialIndex = Spatial(16)
 spatialIndex.create(cpValues)
 
 def newBasePolynomialList(degree):
